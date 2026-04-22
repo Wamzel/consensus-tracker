@@ -18,8 +18,12 @@ export async function GET(
   const type = url.searchParams.get("type") || "full";
 
   if (type === "quote") {
-    const quote = await getQuote(symbol);
-    return NextResponse.json(quote);
+    try {
+      const quote = await getQuote(symbol);
+      return NextResponse.json(quote);
+    } catch {
+      return NextResponse.json(null);
+    }
   }
 
   if (type === "candles") {
@@ -33,8 +37,13 @@ export async function GET(
       "1Y": { from: now - 31536000,      resolution: "W" },
     };
     const { from, resolution } = rangeMap[range] || rangeMap["1M"];
-    const candles = await getCandles(symbol, resolution, from, now);
-    return NextResponse.json(candles);
+    try {
+      const candles = await getCandles(symbol, resolution, from, now);
+      return NextResponse.json(candles);
+    } catch {
+      // Finnhub free tier doesn't support candles for all exchanges (returns 403)
+      return NextResponse.json({ s: "no_data" });
+    }
   }
 
   // Full stock data

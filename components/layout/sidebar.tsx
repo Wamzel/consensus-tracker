@@ -77,7 +77,7 @@ export function Sidebar({ unreadCount = 0 }: SidebarProps) {
           if (collapsed) {
             return (
               <Tooltip key={href}>
-                <TooltipTrigger>
+                <TooltipTrigger render={<span />}>
                   <Link href={href}>
                     <span className={cn(
                       "relative flex items-center justify-center w-9 h-9 mx-auto rounded-lg transition-colors",
@@ -124,7 +124,7 @@ export function Sidebar({ unreadCount = 0 }: SidebarProps) {
       )}>
         {collapsed ? (
           <Tooltip>
-            <TooltipTrigger>
+            <TooltipTrigger render={<span />}>
               <Button
                 variant="ghost"
                 size="icon"
@@ -146,7 +146,7 @@ export function Sidebar({ unreadCount = 0 }: SidebarProps) {
               <p className="text-[10px] text-zinc-600 truncate">{user?.email}</p>
             </div>
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger render={<span />}>
                 <Button
                   variant="ghost"
                   size="icon"
