@@ -49,7 +49,18 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Seed initial consensus snapshot
+  // Always create a default alert for the new watchlist item
+  await db.alert.create({
+    data: {
+      userId: session.user.id,
+      watchlistItemId: item.id,
+      ticker: symbol,
+      threshold: 0.5,
+      lastScore: null,
+    },
+  });
+
+  // Seed initial consensus snapshot (best-effort)
   try {
     const trends = await getRecommendations(symbol);
     if (trends.length > 0) {
@@ -68,19 +79,14 @@ export async function POST(req: NextRequest) {
           score,
         },
       });
-      // Create default alert
-      await db.alert.create({
-        data: {
-          userId: session.user.id,
-          watchlistItemId: item.id,
-          ticker: symbol,
-          threshold: 0.5,
-          lastScore: score,
-        },
+      // Update the alert with the initial score
+      await db.alert.update({
+        where: { userId_ticker: { userId: session.user.id, ticker: symbol } },
+        data: { lastScore: score },
       });
     }
   } catch {
-    // Non-fatal: item is added, snapshot will be fetched on next cron
+    // Non-fatal: snapshot will be fetched on next cron run
   }
 
   return NextResponse.json(item, { status: 201 });
