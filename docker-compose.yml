@@ -21,7 +21,7 @@ services:
       - "3002:3000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/consensus_tracker
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3002}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY}
       NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
@@ -37,13 +37,12 @@ services:
   cron:
     image: alpine:3.19
     restart: unless-stopped
-    environment:
-      CRON_SECRET: ${CRON_SECRET}
-    volumes:
-      - ./cron/crontab:/etc/crontabs/root
-    command: crond -f -l 2
     depends_on:
       - app
+    command: >
+      sh -c "apk add --no-cache wget &&
+      echo '0 6 * * * wget -q -O /dev/null --header \"x-cron-secret: ${CRON_SECRET}\" http://app:3000/api/cron' | crontab - &&
+      crond -f -l 2"
 
 volumes:
   postgres_data:
