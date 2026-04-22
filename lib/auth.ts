@@ -3,12 +3,13 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { twoFactor } from "better-auth/plugins";
 import { db } from "@/lib/db";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+// AUTH_URL is a plain runtime env var (not NEXT_PUBLIC_*, which is build-time).
+// Set it in Portainer to your public domain, e.g. https://stocks.wgmns.com
+const authUrl = process.env.AUTH_URL ?? "http://localhost:3000";
 
-// Build trusted origins from the public URL + any extras in env
 const trustedOrigins = [
-  appUrl,
-  ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",").map((s) => s.trim()) ?? []),
+  authUrl,
+  ...( process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",").map((s) => s.trim()) ?? []),
 ];
 
 export const auth = betterAuth({
@@ -27,7 +28,7 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24,
   },
   secret: process.env.BETTER_AUTH_SECRET!,
-  baseURL: appUrl,
+  baseURL: authUrl,
   trustedOrigins,
 });
 
