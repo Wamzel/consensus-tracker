@@ -19,9 +19,15 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/consensus_tracker
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_EMAIL: ${VAPID_EMAIL}
+      CRON_SECRET: ${CRON_SECRET}
     depends_on:
       db:
         condition: service_healthy
@@ -31,6 +37,8 @@ services:
   cron:
     image: alpine:3.19
     restart: unless-stopped
+    environment:
+      CRON_SECRET: ${CRON_SECRET}
     volumes:
       - ./cron/crontab:/etc/crontabs/root
     command: crond -f -l 2
