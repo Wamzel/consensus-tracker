@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getRecommendations, computeConsensusScore } from "@/lib/finnhub";
+import { getQuote, getRecommendations, computeConsensusScore } from "@/lib/finnhub";
 import { yfRecommendations } from "@/lib/yahoo";
 import { sendPushNotification } from "@/lib/push";
 
-// Called by Docker cron or external scheduler
-// Protected by a shared secret
 export async function POST(req: NextRequest) {
   const secret = req.headers.get("x-cron-secret");
   if (secret !== process.env.CRON_SECRET && process.env.NODE_ENV === "production") {
@@ -20,15 +18,45 @@ export async function POST(req: NextRequest) {
   const results: string[] = [];
 
   for (const item of tickers) {
+    // ── Price snapshot (runs regardless of consensus data availability) ──────
+    try {
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      const alreadySaved = await db.priceSnapshot.findUnique({
+        where: { ticker_timestamp: { ticker: item.ticker, timestamp: today } },
+      });
+      if (!alreadySaved) {
+        const quote = await getQuote(item.ticker);
+        if (quote.c > 0) {
+          await db.priceSnapshot.create({
+            data: {
+              ticker: item.ticker,
+              open:   quote.o > 0 ? quote.o : quote.c,
+              high:   quote.h > 0 ? quote.h : quote.c,
+              low:    quote.l > 0 ? quote.l : quote.c,
+              close:  quote.c,
+              volume: 0n,
+              timestamp: today,
+            },
+          });
+        }
+      }
+    } catch {
+      // Non-fatal: chart will still read whatever snapshots exist
+    }
+
+    // ── Consensus snapshot + alerts ──────────────────────────────────────────
     try {
       let trends = await getRecommendations(item.ticker).catch(() => []);
       if (!trends.length) trends = await yfRecommendations(item.ticker).catch(() => []);
-      if (!trends.length) continue;
+      if (!trends.length) {
+        results.push(`${item.ticker}: no consensus data`);
+        continue;
+      }
 
       const latest = trends[0];
       const newScore = computeConsensusScore(latest);
 
-      // Check if snapshot for this period already exists
       const existing = await db.consensusSnapshot.findFirst({
         where: { watchlistItemId: item.id, period: latest.period },
       });
@@ -39,17 +67,16 @@ export async function POST(req: NextRequest) {
             watchlistItemId: item.id,
             ticker: item.ticker,
             period: latest.period,
-            strongBuy: latest.strongBuy,
-            buy: latest.buy,
-            hold: latest.hold,
-            sell: latest.sell,
+            strongBuy:  latest.strongBuy,
+            buy:        latest.buy,
+            hold:       latest.hold,
+            sell:       latest.sell,
             strongSell: latest.strongSell,
             score: newScore,
           },
         });
       }
 
-      // Check alert thresholds
       const alert = await db.alert.findUnique({
         where: { userId_ticker: { userId: item.userId, ticker: item.ticker } },
       });
@@ -61,38 +88,28 @@ export async function POST(req: NextRequest) {
           const title = `${item.ticker} consensus ${direction}`;
           const body = `Score moved from ${alert.lastScore.toFixed(2)} → ${newScore.toFixed(2)} (Δ${delta.toFixed(2)})`;
 
-          // Store in-app notification
           await db.notification.create({
             data: { userId: item.userId, ticker: item.ticker, title, body },
           });
 
-          // Send push to all user subscriptions
-          const subs = await db.pushSubscription.findMany({
-            where: { userId: item.userId },
-          });
-
+          const subs = await db.pushSubscription.findMany({ where: { userId: item.userId } });
           for (const sub of subs) {
             try {
               await sendPushNotification(sub.endpoint, sub.p256dh, sub.auth, {
-                title,
-                body,
-                url: `/stock/${item.ticker}`,
+                title, body, url: `/stock/${item.ticker}`,
               });
             } catch (e: unknown) {
-              const error = e as Error;
-              if (error.message === "SUBSCRIPTION_EXPIRED") {
+              if ((e as Error).message === "SUBSCRIPTION_EXPIRED") {
                 await db.pushSubscription.delete({ where: { id: sub.id } });
               }
             }
           }
 
-          // Update lastScore
           await db.alert.update({
             where: { id: alert.id },
             data: { lastScore: newScore, lastTriggered: new Date() },
           });
         } else {
-          // Keep lastScore current even if no alert
           await db.alert.update({
             where: { id: alert.id },
             data: { lastScore: newScore },
@@ -102,7 +119,7 @@ export async function POST(req: NextRequest) {
 
       results.push(`${item.ticker}: ${newScore.toFixed(2)}`);
     } catch (e) {
-      results.push(`${item.ticker}: ERROR`);
+      results.push(`${item.ticker}: ERROR ${e}`);
     }
   }
 

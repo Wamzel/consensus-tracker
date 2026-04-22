@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { headers } from "next/headers";
-import { getRecommendations, computeConsensusScore } from "@/lib/finnhub";
+import { getQuote, getRecommendations, computeConsensusScore } from "@/lib/finnhub";
 import { yfRecommendations } from "@/lib/yahoo";
 
 export async function GET() {
@@ -89,6 +89,30 @@ export async function POST(req: NextRequest) {
     }
   } catch {
     // Non-fatal: snapshot will be fetched on next cron run
+  }
+
+  // Seed initial price snapshot (best-effort, Finnhub quote)
+  try {
+    const quote = await getQuote(symbol);
+    if (quote.c > 0) {
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      await db.priceSnapshot.upsert({
+        where: { ticker_timestamp: { ticker: symbol, timestamp: today } },
+        create: {
+          ticker: symbol,
+          open:   quote.o > 0 ? quote.o : quote.c,
+          high:   quote.h > 0 ? quote.h : quote.c,
+          low:    quote.l > 0 ? quote.l : quote.c,
+          close:  quote.c,
+          volume: 0n,
+          timestamp: today,
+        },
+        update: {},
+      });
+    }
+  } catch {
+    // Non-fatal
   }
 
   return NextResponse.json(item, { status: 201 });

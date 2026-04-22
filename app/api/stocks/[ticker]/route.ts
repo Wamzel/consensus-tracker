@@ -52,7 +52,27 @@ export async function GET(
         console.log(`[candles] got ${candles.c.length} points for ${symbol} via yfCandles`);
         return NextResponse.json(candles);
       } catch (yfErr) {
-        console.error(`[candles] all sources failed for ${symbol}: ${yfErr}`);
+        console.log(`[candles] external sources failed for ${symbol}, reading DB: ${yfErr}`);
+        // Fall back to stored daily price snapshots
+        const since = new Date();
+        const days = { "1D": 1, "1W": 7, "1M": 31, "3M": 92, "1Y": 366 }[range] ?? 31;
+        since.setDate(since.getDate() - days);
+        const snaps = await db.priceSnapshot.findMany({
+          where: { ticker: symbol, timestamp: { gte: since } },
+          orderBy: { timestamp: "asc" },
+        });
+        if (snaps.length > 0) {
+          console.log(`[candles] serving ${snaps.length} DB snapshots for ${symbol}`);
+          return NextResponse.json({
+            s: "ok",
+            t: snaps.map((s) => Math.floor(s.timestamp.getTime() / 1000)),
+            o: snaps.map((s) => s.open),
+            h: snaps.map((s) => s.high),
+            l: snaps.map((s) => s.low),
+            c: snaps.map((s) => s.close),
+            v: snaps.map((s) => Number(s.volume)),
+          });
+        }
         return NextResponse.json({ s: "no_data" });
       }
     }
