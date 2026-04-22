@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { headers } from "next/headers";
-import { getRecommendations, getQuote, computeConsensusScore } from "@/lib/finnhub";
+import { getRecommendations, computeConsensusScore } from "@/lib/finnhub";
+import { yfRecommendations } from "@/lib/yahoo";
 
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -60,9 +61,10 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Seed initial consensus snapshot (best-effort)
+  // Seed initial consensus snapshot (best-effort, Finnhub then Yahoo Finance)
   try {
-    const trends = await getRecommendations(symbol);
+    let trends = await getRecommendations(symbol).catch(() => []);
+    if (trends.length === 0) trends = await yfRecommendations(symbol).catch(() => []);
     if (trends.length > 0) {
       const latest = trends[0];
       const score = computeConsensusScore(latest);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getRecommendations, computeConsensusScore } from "@/lib/finnhub";
+import { yfRecommendations } from "@/lib/yahoo";
 import { sendPushNotification } from "@/lib/push";
 
 // Called by Docker cron or external scheduler
@@ -20,7 +21,8 @@ export async function POST(req: NextRequest) {
 
   for (const item of tickers) {
     try {
-      const trends = await getRecommendations(item.ticker);
+      let trends = await getRecommendations(item.ticker).catch(() => []);
+      if (!trends.length) trends = await yfRecommendations(item.ticker).catch(() => []);
       if (!trends.length) continue;
 
       const latest = trends[0];
