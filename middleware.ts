@@ -6,12 +6,10 @@ const PUBLIC_PATHS = ["/login", "/register", "/api/auth"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths through
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // Allow static assets
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -22,18 +20,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check session via better-auth
-  const { data: session } = await betterFetch<{ user: { id: string } }>(
-    "/api/auth/get-session",
-    {
-      baseURL: request.nextUrl.origin,
-      headers: { cookie: request.headers.get("cookie") || "" },
-    }
-  );
+  try {
+    const { data: session } = await betterFetch<{ user: { id: string } }>(
+      "/api/auth/get-session",
+      {
+        baseURL: request.nextUrl.origin,
+        headers: { cookie: request.headers.get("cookie") || "" },
+      }
+    );
 
-  if (!session?.user) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    if (!session?.user) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+  } catch {
+    // DB not ready or network error — send to login rather than 500
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();

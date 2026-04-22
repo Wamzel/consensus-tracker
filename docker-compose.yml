@@ -32,7 +32,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "node_modules/.bin/prisma migrate deploy && node_modules/.bin/next start"
+      sh -c "node_modules/.bin/prisma db push --accept-data-loss && node_modules/.bin/next start"
 
   cron:
     image: alpine:3.19
