@@ -45,10 +45,14 @@ export async function GET(
       const candles = await getCandles(symbol, resolution, from, now);
       if (candles.s === "no_data") throw new Error("no_data");
       return NextResponse.json(candles);
-    } catch {
+    } catch (finnhubErr) {
+      console.log(`[candles] Finnhub failed for ${symbol} (${range}): ${finnhubErr}`);
       try {
-        return NextResponse.json(await yfCandles(symbol, range));
-      } catch {
+        const candles = await yfCandles(symbol, range);
+        console.log(`[candles] got ${candles.c.length} points for ${symbol} via yfCandles`);
+        return NextResponse.json(candles);
+      } catch (yfErr) {
+        console.error(`[candles] all sources failed for ${symbol}: ${yfErr}`);
         return NextResponse.json({ s: "no_data" });
       }
     }

@@ -57,7 +57,7 @@ async function stooqCandles(symbol: string, rangeKey: YFRange): Promise<YFCandle
   const stooqSym = toStooqSymbol(symbol);
   const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSym)}&d1=${fmt(from)}&d2=${fmt(now)}&i=${interval}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: HEADERS, cache: "no-store" });
   if (!res.ok) throw new Error(`Stooq ${res.status} for ${stooqSym}`);
 
   const text = await res.text();
@@ -84,7 +84,10 @@ async function stooqCandles(symbol: string, rangeKey: YFRange): Promise<YFCandle
     result.v.push(parseInt(volume) || 0);
   }
 
-  if (result.t.length === 0) throw new Error(`Stooq: all rows invalid for ${stooqSym}`);
+  if (result.t.length === 0) {
+    console.error(`[stooq] all rows invalid for ${stooqSym}, raw: ${lines.slice(1, 3).join(" | ")}`);
+    throw new Error(`Stooq: all rows invalid for ${stooqSym}`);
+  }
   console.log(`[stooq] ${result.t.length} candles for ${symbol} (${rangeKey})`);
   return result;
 }
