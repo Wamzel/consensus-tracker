@@ -21,7 +21,7 @@ services:
       - "3002:3000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/consensus_tracker
-      AUTH_URL: ${AUTH_URL}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3002}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY}
