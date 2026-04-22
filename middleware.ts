@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { betterFetch } from "@better-fetch/fetch";
 
 const PUBLIC_PATHS = ["/login", "/register", "/api/auth"];
 
-export async function middleware(request: NextRequest) {
+// better-auth session cookie names (http vs https)
+const SESSION_COOKIES = ["better-auth.session_token", "__Secure-better-auth.session_token"];
+
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
@@ -20,20 +22,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  try {
-    const { data: session } = await betterFetch<{ user: { id: string } }>(
-      "/api/auth/get-session",
-      {
-        baseURL: request.nextUrl.origin,
-        headers: { cookie: request.headers.get("cookie") || "" },
-      }
-    );
+  // Lightweight cookie presence check — no DB/HTTP call needed here.
+  // Actual session validity is verified in each layout/route handler.
+  const hasSession = SESSION_COOKIES.some((name) => request.cookies.has(name));
 
-    if (!session?.user) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-  } catch {
-    // DB not ready or network error — send to login rather than 500
+  if (!hasSession) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
