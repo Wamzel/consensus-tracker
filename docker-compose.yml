@@ -15,7 +15,7 @@ services:
       retries: 10
 
   app:
-    build: .
+    image: ghcr.io/${GITHUB_REPOSITORY:-your-username/consensus-tracker}:latest
     restart: unless-stopped
     ports:
       - "3002:3000"
@@ -32,7 +32,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "npx prisma migrate deploy && node server.js"
+      sh -c "node_modules/.bin/prisma migrate deploy && node_modules/.bin/next start"
 
   cron:
     image: alpine:3.19
