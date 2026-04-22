@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  watchlist     WatchlistItem[]
+  alerts        Alert[]
+  notifications Notification[]
+  pushSubs      PushSubscription[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  ticker    String
+  name      String?
+  exchange  String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consensusSnapshots ConsensusSnapshot[]
+  alerts             Alert[]
+
+  @@unique([userId, ticker])
+}
+
+model ConsensusSnapshot {
+  id              String   @id @default(cuid())
+  watchlistItemId String
+  ticker          String
+  period          String
+  strongBuy       Int      @default(0)
+  buy             Int      @default(0)
+  hold            Int      @default(0)
+  sell            Int      @default(0)
+  strongSell      Int      @default(0)
+  score           Float
+  recordedAt      DateTime @default(now())
+
+  watchlistItem WatchlistItem @relation(fields: [watchlistItemId], references: [id], onDelete: Cascade)
+
+  @@index([ticker, recordedAt])
+}
+
+model PriceSnapshot {
+  id        String   @id @default(cuid())
+  ticker    String
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    BigInt
+  timestamp DateTime
+
+  @@unique([ticker, timestamp])
+  @@index([ticker, timestamp])
+}
+
+model Alert {
+  id              String    @id @default(cuid())
+  userId          String
+  watchlistItemId String
+  ticker          String
+  threshold       Float     @default(0.5)
+  enabled         Boolean   @default(true)
+  lastScore       Float?
+  lastTriggered   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchlistItem WatchlistItem @relation(fields: [watchlistItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ticker])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  ticker    String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,98 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { headers } from "next/headers";
+import { getRecommendations, getQuote, computeConsensusScore } from "@/lib/finnhub";
+
+export async function GET() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const items = await db.watchlistItem.findMany({
+    where: { userId: session.user.id },
+    orderBy: { position: "asc" },
+    include: {
+      consensusSnapshots: {
+        orderBy: { recordedAt: "desc" },
+        take: 1,
+      },
+      alerts: { take: 1 },
+    },
+  });
+
+  return NextResponse.json(items);
+}
+
+export async function POST(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { ticker, name, exchange } = await req.json();
+  if (!ticker) return NextResponse.json({ error: "ticker required" }, { status: 400 });
+
+  const symbol = ticker.toUpperCase();
+
+  const existing = await db.watchlistItem.findUnique({
+    where: { userId_ticker: { userId: session.user.id, ticker: symbol } },
+  });
+  if (existing) return NextResponse.json({ error: "Already in watchlist" }, { status: 409 });
+
+  const count = await db.watchlistItem.count({ where: { userId: session.user.id } });
+
+  const item = await db.watchlistItem.create({
+    data: {
+      userId: session.user.id,
+      ticker: symbol,
+      name: name || symbol,
+      exchange: exchange || null,
+      position: count,
+    },
+  });
+
+  // Seed initial consensus snapshot
+  try {
+    const trends = await getRecommendations(symbol);
+    if (trends.length > 0) {
+      const latest = trends[0];
+      const score = computeConsensusScore(latest);
+      await db.consensusSnapshot.create({
+        data: {
+          watchlistItemId: item.id,
+          ticker: symbol,
+          period: latest.period,
+          strongBuy: latest.strongBuy,
+          buy: latest.buy,
+          hold: latest.hold,
+          sell: latest.sell,
+          strongSell: latest.strongSell,
+          score,
+        },
+      });
+      // Create default alert
+      await db.alert.create({
+        data: {
+          userId: session.user.id,
+          watchlistItemId: item.id,
+          ticker: symbol,
+          threshold: 0.5,
+          lastScore: score,
+        },
+      });
+    }
+  } catch {
+    // Non-fatal: item is added, snapshot will be fetched on next cron
+  }
+
+  return NextResponse.json(item, { status: 201 });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { ticker } = await req.json();
+  await db.watchlistItem.deleteMany({
+    where: { userId: session.user.id, ticker: ticker.toUpperCase() },
+  });
+  return NextResponse.json({ ok: true });
+}
